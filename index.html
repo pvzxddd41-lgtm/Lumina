@@ -7,13 +7,25 @@
 <style>
 html,body{margin:0;padding:0;overflow:hidden;background:#000}
 canvas{display:block}
+#menu,#pause,#fade{
+position:absolute;top:0;left:0;width:100%;height:100%;
+display:flex;align-items:center;justify-content:center;
+flex-direction:column;z-index:10
+}
+#menu,#pause{background:rgba(0,0,0,.85);color:#fff}
+#fade{background:#000;pointer-events:none;opacity:0;transition:.6s}
+button{
+padding:14px 26px;margin:10px;
+background:#3bb;color:#fff;border:none;
+border-radius:12px;font-size:16px
+}
 #joystick{
 position:absolute;bottom:30px;left:30px;
-width:120px;height:120px;border-radius:50%;
+width:130px;height:130px;border-radius:50%;
 background:rgba(255,255,255,.15)
 }
 #stick{
-position:absolute;left:40px;top:40px;
+position:absolute;left:45px;top:45px;
 width:40px;height:40px;border-radius:50%;
 background:rgba(255,255,255,.5)
 }
@@ -21,69 +33,76 @@ background:rgba(255,255,255,.5)
 </head>
 <body>
 
+<div id="menu">
+<h1>LUMINA</h1>
+<button onclick="start()">Comenzar</button>
+</div>
+
+<div id="pause" style="display:none">
+<h2>Pausa</h2>
+<button onclick="resume()">Continuar</button>
+<button onclick="save()">Guardar</button>
+<button onclick="location.reload()">Salir</button>
+</div>
+
+<div id="fade"></div>
+
 <canvas id="c"></canvas>
 <div id="joystick"><div id="stick"></div></div>
 
 <script>
+/* CANVAS */
 const c=document.getElementById("c");
 const ctx=c.getContext("2d",{alpha:false});
 c.width=innerWidth;c.height=innerHeight;
 
-const GRAVITY=0.9;
-const SPEED=3.2;
-const JUMP=14;
-const GROUND=c.height-100;
+/* CONSTANTES */
+const GRAVITY=0.9,SPEED=3.4,JUMP=14,GROUND=c.height-100;
 
-const player={
-x:200,y:GROUND,
-vx:0,vy:0,
-w:24,h:48,
-onGround:false,
-walk:0,
-jumping:false,
-pulse:0
+/* ESTADO */
+let game=false,camX=0,fade=document.getElementById("fade");
+
+/* JUGADOR */
+const p={
+x:200,y:GROUND,vx:0,vy:0,
+onGround:false,walk:0,jump:false,pulse:0
 };
 
+/* MUNDO */
 const platforms=[
-{x:600,y:GROUND-120,w:160},
-{x:950,y:GROUND-200,w:180}
+{x:600,y:GROUND-120,w:180},
+{x:1000,y:GROUND-220,w:200}
 ];
-
-const doors=[{x:1300,y:GROUND-80,w:50,h:80,open:false}];
-
+const doors=[{x:1500,y:GROUND-80,w:60,h:80,open:false}];
+const darkZones=[{x:900,w:400}];
 const trees=[];
-for(let i=0;i<2000;i+=220){
-trees.push({x:i});
-}
+for(let i=0;i<2200;i+=200)trees.push({x:i});
 
+/* PARTÍCULAS */
 const particles=[];
-
-let camX=0;
 
 /* INPUT */
 let joy=false;
-joystick.addEventListener("pointerdown",()=>joy=true);
-window.addEventListener("pointerup",()=>{
-joy=false;player.vx=0;
-stick.style.left="40px";stick.style.top="40px";
-});
-window.addEventListener("pointermove",e=>{
+joystick.onpointerdown=()=>joy=true;
+window.onpointerup=()=>{
+joy=false;p.vx=0;
+stick.style.left="45px";stick.style.top="45px";
+};
+window.onpointermove=e=>{
 if(!joy)return;
 const r=joystick.getBoundingClientRect();
-const dx=e.clientX-(r.left+60);
-player.vx=Math.max(-SPEED,Math.min(SPEED,dx*0.05));
-stick.style.left=40+dx*0.5+"px";
-});
+const dx=e.clientX-(r.left+65);
+p.vx=Math.max(-SPEED,Math.min(SPEED,dx*0.05));
+stick.style.left=45+dx*.4+"px";
+};
 
 /* SALTO */
 window.addEventListener("pointerdown",e=>{
-if(e.clientX>innerWidth/2 && player.onGround){
-player.vy=-JUMP;
-player.onGround=false;
-player.jumping=true;
-for(let i=0;i<12;i++)
+if(e.clientX>innerWidth/2 && p.onGround){
+p.vy=-JUMP;p.onGround=false;p.jump=true;
+for(let i=0;i<14;i++)
 particles.push({
-x:player.x,y:player.y,
+x:p.x,y:p.y,
 vx:(Math.random()-.5)*4,
 vy:Math.random()*-4,
 life:30
@@ -91,81 +110,83 @@ life:30
 }
 });
 
-/* HABILIDAD: pulso de luz */
+/* HABILIDAD */
 window.addEventListener("touchstart",e=>{
-if(e.touches.length===2 && player.pulse<=0){
-player.pulse=40;
+if(e.touches.length===2 && p.pulse<=0){
+p.pulse=40;
 doors.forEach(d=>{
-if(Math.abs(player.x-d.x)<150)d.open=true;
+if(Math.abs(p.x-d.x)<160)d.open=true;
 });
 }
 });
 
 /* UPDATE */
 function update(){
-player.vy+=GRAVITY;
-player.x+=player.vx;
-player.y+=player.vy;
+p.vy+=GRAVITY;
+p.x+=p.vx;p.y+=p.vy;
+p.onGround=false;
 
-player.onGround=false;
-if(player.y>=GROUND){
-player.y=GROUND;player.vy=0;
-player.onGround=true;player.jumping=false;
+/* suelo */
+if(p.y>=GROUND){
+p.y=GROUND;p.vy=0;p.onGround=true;p.jump=false;
 }
 
 /* plataformas */
-platforms.forEach(p=>{
-if(player.x>p.x-20 && player.x<p.x+p.w &&
-player.y>=p.y && player.y<=p.y+20 && player.vy>=0){
-player.y=p.y;player.vy=0;player.onGround=true;
+platforms.forEach(pl=>{
+if(p.x>pl.x-20 && p.x<pl.x+pl.w &&
+p.y>=pl.y && p.y<=pl.y+20 && p.vy>=0){
+p.y=pl.y;p.vy=0;p.onGround=true;
 }
 });
 
 /* puertas */
 doors.forEach(d=>{
 if(!d.open &&
-player.x>d.x-20 && player.x<d.x+d.w &&
-player.y>d.y && player.y<d.y+d.h){
-player.x-=player.vx;
+p.x>d.x-20 && p.x<d.x+d.w &&
+p.y>d.y && p.y<d.y+d.h){
+p.x-=p.vx;
 }
 });
 
 /* anim */
-if(Math.abs(player.vx)>0.1 && player.onGround)player.walk+=0.15;
-else player.walk=0;
+if(Math.abs(p.vx)>0.1 && p.onGround)p.walk+=0.15;
+else p.walk=0;
 
-particles.forEach(p=>{
-p.x+=p.vx;p.y+=p.vy;p.life--;
+particles.forEach(pt=>{
+pt.x+=pt.vx;pt.y+=pt.vy;pt.life--;
 });
 for(let i=particles.length-1;i>=0;i--)
 if(particles[i].life<=0)particles.splice(i,1);
 
-if(player.pulse>0)player.pulse--;
-
-camX=player.x-c.width/2;
+if(p.pulse>0)p.pulse--;
+camX=p.x-c.width/2;
 }
 
 /* DRAW */
 function draw(){
-ctx.fillStyle="#0a1a12";
+ctx.fillStyle="#08140f";
 ctx.fillRect(0,0,c.width,c.height);
 
 /* árboles */
 trees.forEach(t=>{
 const x=t.x-camX;
 if(x<-100||x>c.width+100)return;
-ctx.fillStyle="#3b5";
+ctx.fillStyle="#365";
 ctx.beginPath();
-ctx.arc(x,c.height-200,60,0,6.28);
+ctx.arc(x,c.height-220,60,0,6.28);
 ctx.fill();
-ctx.fillStyle="#5a3";
-ctx.fillRect(x-12,c.height-200,24,100);
+ctx.fillStyle="#543";
+ctx.fillRect(x-14,c.height-220,28,120);
 });
 
 /* plataformas */
-ctx.fillStyle="#2d6";
-platforms.forEach(p=>{
-ctx.fillRect(p.x-camX,p.y,p.w,14);
+ctx.fillStyle="#2a7";
+platforms.forEach(pl=>ctx.fillRect(pl.x-camX,pl.y,pl.w,14));
+
+/* zonas oscuras */
+darkZones.forEach(z=>{
+ctx.fillStyle="rgba(0,0,0,.35)";
+ctx.fillRect(z.x-camX,0,z.w,c.height);
 });
 
 /* puertas */
@@ -175,51 +196,59 @@ ctx.fillRect(d.x-camX,d.y,d.w,d.h);
 });
 
 /* partículas */
-particles.forEach(p=>{
-ctx.fillStyle="rgba(200,255,220,"+(p.life/30)+")";
-ctx.fillRect(p.x-camX,p.y,4,4);
+particles.forEach(pt=>{
+ctx.fillStyle="rgba(200,255,220,"+(pt.life/30)+")";
+ctx.fillRect(pt.x-camX,pt.y,4,4);
 });
 
 /* jugador */
-const px=player.x-camX;
+const px=p.x-camX;
 ctx.fillStyle="#eafff2";
 ctx.beginPath();
-ctx.arc(px,player.y-36,14,0,6.28);
+ctx.arc(px,p.y-36,14,0,6.28);
 ctx.fill();
 
 /* piernas */
-ctx.strokeStyle="#bfe";
-ctx.lineWidth=4;
-const step=Math.sin(player.walk)*6;
+ctx.strokeStyle="#bfe";ctx.lineWidth=4;
+const step=Math.sin(p.walk)*6;
 ctx.beginPath();
-if(player.jumping){
-ctx.moveTo(px-6,player.y);
-ctx.lineTo(px-6,player.y+16);
-ctx.moveTo(px+6,player.y);
-ctx.lineTo(px+6,player.y+16);
+if(p.jump){
+ctx.moveTo(px-6,p.y);ctx.lineTo(px-6,p.y+16);
+ctx.moveTo(px+6,p.y);ctx.lineTo(px+6,p.y+16);
 }else{
-ctx.moveTo(px-6,player.y);
-ctx.lineTo(px-6+step,player.y+18);
-ctx.moveTo(px+6,player.y);
-ctx.lineTo(px+6-step,player.y+18);
+ctx.moveTo(px-6,p.y);ctx.lineTo(px-6+step,p.y+18);
+ctx.moveTo(px+6,p.y);ctx.lineTo(px+6-step,p.y+18);
 }
 ctx.stroke();
 
 /* pulso */
-if(player.pulse>0){
-ctx.fillStyle="rgba(200,255,220,.15)";
+if(p.pulse>0){
+ctx.fillStyle="rgba(200,255,220,.12)";
 ctx.beginPath();
-ctx.arc(px,player.y-36,120,0,6.28);
+ctx.arc(px,p.y-36,140,0,6.28);
 ctx.fill();
 }
 }
 
 /* LOOP */
 function loop(){
+if(!game)return;
 update();draw();
 requestAnimationFrame(loop);
 }
-loop();
+
+/* CONTROL */
+function start(){
+menu.style.display="none";
+game=true;loop();
+}
+function resume(){
+pause.style.display="none";
+game=true;loop();
+}
+function save(){
+localStorage.setItem("luminaSave",JSON.stringify(p));
+}
 </script>
 </body>
 </html>
