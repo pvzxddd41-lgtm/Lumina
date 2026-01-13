@@ -2,202 +2,186 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <title>Lumina</title>
 <style>
 html,body{margin:0;padding:0;overflow:hidden;background:#000}
 canvas{display:block}
-#menu,#pause,#fade{
-position:absolute;top:0;left:0;width:100%;height:100%;
-display:flex;align-items:center;justify-content:center;
-flex-direction:column;z-index:10
-}
-#menu,#pause{background:rgba(0,0,0,.85);color:#fff}
-#fade{background:#000;pointer-events:none;opacity:0;transition:.6s}
-button{
-padding:14px 26px;margin:10px;
-background:#3bb;color:#fff;border:none;
-border-radius:12px;font-size:16px
-}
+.ui{position:absolute;z-index:10}
 #joystick{
-position:absolute;bottom:30px;left:30px;
-width:130px;height:130px;border-radius:50%;
-background:rgba(255,255,255,.15)
+bottom:30px;left:30px;width:140px;height:140px;
+border-radius:50%;background:rgba(255,255,255,.08)
 }
 #stick{
-position:absolute;left:45px;top:45px;
+position:absolute;left:50px;top:50px;
 width:40px;height:40px;border-radius:50%;
-background:rgba(255,255,255,.5)
+background:rgba(255,255,255,.6)
 }
+.btn{
+bottom:40px;width:70px;height:70px;border-radius:50%;
+background:rgba(255,255,255,.15);
+right:30px
+}
+#skill{right:120px}
 </style>
 </head>
 <body>
 
-<div id="menu">
-<h1>LUMINA</h1>
-<button onclick="start()">Comenzar</button>
-</div>
-
-<div id="pause" style="display:none">
-<h2>Pausa</h2>
-<button onclick="resume()">Continuar</button>
-<button onclick="save()">Guardar</button>
-<button onclick="location.reload()">Salir</button>
-</div>
-
-<div id="fade"></div>
-
 <canvas id="c"></canvas>
-<div id="joystick"><div id="stick"></div></div>
+
+<div id="joystick" class="ui"><div id="stick"></div></div>
+<div id="jump" class="ui btn"></div>
+<div id="skill" class="ui btn"></div>
 
 <script>
 /* CANVAS */
-const c=document.getElementById("c");
-const ctx=c.getContext("2d",{alpha:false});
+const c=document.getElementById("c"),ctx=c.getContext("2d");
 c.width=innerWidth;c.height=innerHeight;
 
 /* CONSTANTES */
-const GRAVITY=0.9,SPEED=3.4,JUMP=14,GROUND=c.height-100;
+const GROUND=c.height-120,GRAV=0.85,SPEED=3.8,JUMP=15;
 
-/* ESTADO */
-let game=false,camX=0,fade=document.getElementById("fade");
+/* CAMARA */
+let camX=0,camVX=0;
 
 /* JUGADOR */
 const p={
 x:200,y:GROUND,vx:0,vy:0,
-onGround:false,walk:0,jump:false,pulse:0
+on:false,walk:0,jump:false,pulse:0
 };
 
 /* MUNDO */
 const platforms=[
-{x:600,y:GROUND-120,w:180},
-{x:1000,y:GROUND-220,w:200}
+{x:600,y:GROUND-140,w:200},
+{x:1000,y:GROUND-240,w:200}
 ];
-const doors=[{x:1500,y:GROUND-80,w:60,h:80,open:false}];
-const darkZones=[{x:900,w:400}];
+const doors=[{x:1500,y:GROUND-90,w:60,h:90,open:false}];
 const trees=[];
-for(let i=0;i<2200;i+=200)trees.push({x:i});
+for(let i=0;i<2400;i+=160)trees.push({x:i});
 
-/* PARTÍCULAS */
-const particles=[];
+/* PARTICULAS */
+const parts=[];
 
-/* INPUT */
+/* JOYSTICK REAL */
 let joy=false;
-joystick.onpointerdown=()=>joy=true;
+const joyEl=joystick,stick=stickEl=document.getElementById("stick");
+
+joyEl.onpointerdown=e=>joy=true;
 window.onpointerup=()=>{
 joy=false;p.vx=0;
-stick.style.left="45px";stick.style.top="45px";
+stick.style.left="50px";stick.style.top="50px";
 };
 window.onpointermove=e=>{
 if(!joy)return;
-const r=joystick.getBoundingClientRect();
-const dx=e.clientX-(r.left+65);
-p.vx=Math.max(-SPEED,Math.min(SPEED,dx*0.05));
-stick.style.left=45+dx*.4+"px";
+const r=joyEl.getBoundingClientRect();
+let dx=e.clientX-(r.left+70);
+dx=Math.max(-50,Math.min(50,dx));
+p.vx=dx/50*SPEED;
+stick.style.left=50+dx+"px";
 };
 
-/* SALTO */
-window.addEventListener("pointerdown",e=>{
-if(e.clientX>innerWidth/2 && p.onGround){
-p.vy=-JUMP;p.onGround=false;p.jump=true;
-for(let i=0;i<14;i++)
-particles.push({
+/* BOTONES */
+jump.onpointerdown=()=>{
+if(p.on){
+p.vy=-JUMP;p.on=false;p.jump=true;
+for(let i=0;i<20;i++)
+parts.push({
 x:p.x,y:p.y,
 vx:(Math.random()-.5)*4,
-vy:Math.random()*-4,
-life:30
+vy:Math.random()*-5,
+life:40
 });
 }
-});
-
-/* HABILIDAD */
-window.addEventListener("touchstart",e=>{
-if(e.touches.length===2 && p.pulse<=0){
-p.pulse=40;
+};
+skill.onpointerdown=()=>{
+if(p.pulse<=0){
+p.pulse=50;
 doors.forEach(d=>{
-if(Math.abs(p.x-d.x)<160)d.open=true;
+if(Math.abs(p.x-d.x)<180)d.open=true;
 });
 }
-});
+};
 
 /* UPDATE */
 function update(){
-p.vy+=GRAVITY;
+p.vy+=GRAV;
 p.x+=p.vx;p.y+=p.vy;
-p.onGround=false;
+p.on=false;
 
 /* suelo */
 if(p.y>=GROUND){
-p.y=GROUND;p.vy=0;p.onGround=true;p.jump=false;
+p.y=GROUND;p.vy=0;p.on=true;p.jump=false;
 }
 
 /* plataformas */
 platforms.forEach(pl=>{
-if(p.x>pl.x-20 && p.x<pl.x+pl.w &&
-p.y>=pl.y && p.y<=pl.y+20 && p.vy>=0){
-p.y=pl.y;p.vy=0;p.onGround=true;
+if(p.x>pl.x-20&&p.x<pl.x+pl.w&&
+p.y>=pl.y&&p.y<=pl.y+20&&p.vy>=0){
+p.y=pl.y;p.vy=0;p.on=true;
 }
 });
 
 /* puertas */
 doors.forEach(d=>{
 if(!d.open &&
-p.x>d.x-20 && p.x<d.x+d.w &&
-p.y>d.y && p.y<d.y+d.h){
+p.x>d.x-20&&p.x<d.x+d.w&&
+p.y>d.y&&p.y<d.y+d.h){
 p.x-=p.vx;
 }
 });
 
 /* anim */
-if(Math.abs(p.vx)>0.1 && p.onGround)p.walk+=0.15;
-else p.walk=0;
+if(Math.abs(p.vx)>0.1&&p.on)p.walk+=0.2;
+else p.walk*=0.8;
 
-particles.forEach(pt=>{
+/* partículas */
+parts.forEach(pt=>{
 pt.x+=pt.vx;pt.y+=pt.vy;pt.life--;
 });
-for(let i=particles.length-1;i>=0;i--)
-if(particles[i].life<=0)particles.splice(i,1);
+for(let i=parts.length-1;i>=0;i--)
+if(parts[i].life<=0)parts.splice(i,1);
 
 if(p.pulse>0)p.pulse--;
-camX=p.x-c.width/2;
+
+/* cámara suave */
+camVX+=(p.x-camX-c.width/2)*0.02;
+camVX*=0.9;
+camX+=camVX;
 }
 
 /* DRAW */
 function draw(){
-ctx.fillStyle="#08140f";
+ctx.clearRect(0,0,c.width,c.height);
+
+/* fondo */
+ctx.fillStyle="#07110c";
 ctx.fillRect(0,0,c.width,c.height);
 
 /* árboles */
 trees.forEach(t=>{
 const x=t.x-camX;
 if(x<-100||x>c.width+100)return;
-ctx.fillStyle="#365";
+ctx.fillStyle="#1f4d38";
 ctx.beginPath();
-ctx.arc(x,c.height-220,60,0,6.28);
+ctx.arc(x,c.height-240,70,0,6.28);
 ctx.fill();
-ctx.fillStyle="#543";
-ctx.fillRect(x-14,c.height-220,28,120);
+ctx.fillStyle="#5a3b2a";
+ctx.fillRect(x-16,c.height-240,32,140);
 });
 
 /* plataformas */
-ctx.fillStyle="#2a7";
-platforms.forEach(pl=>ctx.fillRect(pl.x-camX,pl.y,pl.w,14));
-
-/* zonas oscuras */
-darkZones.forEach(z=>{
-ctx.fillStyle="rgba(0,0,0,.35)";
-ctx.fillRect(z.x-camX,0,z.w,c.height);
-});
+ctx.fillStyle="#2fa87c";
+platforms.forEach(pl=>ctx.fillRect(pl.x-camX,pl.y,pl.w,16));
 
 /* puertas */
 doors.forEach(d=>{
-ctx.fillStyle=d.open?"#4c8":"#633";
+ctx.fillStyle=d.open?"#6fd":"#633";
 ctx.fillRect(d.x-camX,d.y,d.w,d.h);
 });
 
 /* partículas */
-particles.forEach(pt=>{
-ctx.fillStyle="rgba(200,255,220,"+(pt.life/30)+")";
+parts.forEach(pt=>{
+ctx.fillStyle=`rgba(200,255,220,${pt.life/40})`;
 ctx.fillRect(pt.x-camX,pt.y,4,4);
 });
 
@@ -205,50 +189,47 @@ ctx.fillRect(pt.x-camX,pt.y,4,4);
 const px=p.x-camX;
 ctx.fillStyle="#eafff2";
 ctx.beginPath();
-ctx.arc(px,p.y-36,14,0,6.28);
+ctx.arc(px,p.y-40,16,0,6.28);
 ctx.fill();
 
 /* piernas */
-ctx.strokeStyle="#bfe";ctx.lineWidth=4;
-const step=Math.sin(p.walk)*6;
+ctx.strokeStyle="#bff";ctx.lineWidth=4;
+const s=Math.sin(p.walk)*8;
 ctx.beginPath();
 if(p.jump){
-ctx.moveTo(px-6,p.y);ctx.lineTo(px-6,p.y+16);
-ctx.moveTo(px+6,p.y);ctx.lineTo(px+6,p.y+16);
+ctx.moveTo(px-6,p.y);ctx.lineTo(px-6,p.y+18);
+ctx.moveTo(px+6,p.y);ctx.lineTo(px+6,p.y+18);
 }else{
-ctx.moveTo(px-6,p.y);ctx.lineTo(px-6+step,p.y+18);
-ctx.moveTo(px+6,p.y);ctx.lineTo(px+6-step,p.y+18);
+ctx.moveTo(px-6,p.y);ctx.lineTo(px-6+s,p.y+20);
+ctx.moveTo(px+6,p.y);ctx.lineTo(px+6-s,p.y+20);
 }
 ctx.stroke();
 
+/* luz avanzada */
+ctx.globalCompositeOperation="screen";
+const g=ctx.createRadialGradient(px,p.y-40,10,px,p.y-40,140);
+g.addColorStop(0,"rgba(220,255,240,.7)");
+g.addColorStop(1,"rgba(0,0,0,0)");
+ctx.fillStyle=g;
+ctx.beginPath();
+ctx.arc(px,p.y-40,140,0,6.28);
+ctx.fill();
+ctx.globalCompositeOperation="source-over";
+
 /* pulso */
 if(p.pulse>0){
-ctx.fillStyle="rgba(200,255,220,.12)";
+ctx.fillStyle="rgba(220,255,240,.15)";
 ctx.beginPath();
-ctx.arc(px,p.y-36,140,0,6.28);
+ctx.arc(px,p.y-40,200,0,6.28);
 ctx.fill();
 }
 }
 
 /* LOOP */
-function loop(){
-if(!game)return;
+(function loop(){
 update();draw();
 requestAnimationFrame(loop);
-}
-
-/* CONTROL */
-function start(){
-menu.style.display="none";
-game=true;loop();
-}
-function resume(){
-pause.style.display="none";
-game=true;loop();
-}
-function save(){
-localStorage.setItem("luminaSave",JSON.stringify(p));
-}
+})();
 </script>
 </body>
 </html>
