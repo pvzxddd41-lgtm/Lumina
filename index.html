@@ -5,26 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lumina</title>
 <style>
-html,body{margin:0;padding:0;overflow:hidden;background:#000;font-family:sans-serif}
+html,body{margin:0;padding:0;overflow:hidden;background:#000}
 canvas{display:block}
-#menu,#pause{
-position:absolute;top:0;left:0;width:100%;height:100%;
-background:rgba(0,0,0,.9);color:#fff;
-display:flex;flex-direction:column;
-align-items:center;justify-content:center;z-index:10
-}
-button{
-padding:14px 24px;margin:8px;
-background:#3aa;color:#fff;
-border:none;border-radius:10px;font-size:16px
-}
 #joystick{
 position:absolute;bottom:30px;left:30px;
-width:130px;height:130px;border-radius:50%;
-background:rgba(255,255,255,.12)
+width:120px;height:120px;border-radius:50%;
+background:rgba(255,255,255,.15)
 }
 #stick{
-position:absolute;left:45px;top:45px;
+position:absolute;left:40px;top:40px;
 width:40px;height:40px;border-radius:50%;
 background:rgba(255,255,255,.5)
 }
@@ -32,81 +21,128 @@ background:rgba(255,255,255,.5)
 </head>
 <body>
 
-<div id="menu">
-<h1>LUMINA</h1>
-<button onclick="startGame()">Jugar</button>
-<button onclick="loadGame()">Cargar</button>
-</div>
-
-<div id="pause" style="display:none"></div>
-
 <canvas id="c"></canvas>
 <div id="joystick"><div id="stick"></div></div>
-
-<audio id="ambient" loop>
-<source src="https://cdn.pixabay.com/audio/2022/03/15/audio_2f60b36e7b.mp3">
-</audio>
 
 <script>
 const c=document.getElementById("c");
 const ctx=c.getContext("2d",{alpha:false});
 c.width=innerWidth;c.height=innerHeight;
 
-let camX=0,game=true;
-const SPEED=3;
+const GRAVITY=0.9;
+const SPEED=3.2;
+const JUMP=14;
+const GROUND=c.height-100;
 
-const player={x:200,y:c.height/2,r:36,light:1,vx:0,vy:0};
+const player={
+x:200,y:GROUND,
+vx:0,vy:0,
+w:24,h:48,
+onGround:false,
+walk:0,
+jumping:false,
+pulse:0
+};
 
-const flowers=[],trees=[],darkZones=[{x:1400,w:400},{x:3400,w:500}];
-const doors=[{x:2600,open:false}];
-const levelEnd=4800;
+const platforms=[
+{x:600,y:GROUND-120,w:160},
+{x:950,y:GROUND-200,w:180}
+];
 
-/* GENERAR MAPA */
-for(let i=600;i<3000;i+=500)flowers.push({x:i,y:320,t:false});
-for(let i=0;i<5200;i+=180){
-trees.push({
-x:i,
-h:120+Math.random()*80
+const doors=[{x:1300,y:GROUND-80,w:50,h:80,open:false}];
+
+const trees=[];
+for(let i=0;i<2000;i+=220){
+trees.push({x:i});
+}
+
+const particles=[];
+
+let camX=0;
+
+/* INPUT */
+let joy=false;
+joystick.addEventListener("pointerdown",()=>joy=true);
+window.addEventListener("pointerup",()=>{
+joy=false;player.vx=0;
+stick.style.left="40px";stick.style.top="40px";
+});
+window.addEventListener("pointermove",e=>{
+if(!joy)return;
+const r=joystick.getBoundingClientRect();
+const dx=e.clientX-(r.left+60);
+player.vx=Math.max(-SPEED,Math.min(SPEED,dx*0.05));
+stick.style.left=40+dx*0.5+"px";
+});
+
+/* SALTO */
+window.addEventListener("pointerdown",e=>{
+if(e.clientX>innerWidth/2 && player.onGround){
+player.vy=-JUMP;
+player.onGround=false;
+player.jumping=true;
+for(let i=0;i<12;i++)
+particles.push({
+x:player.x,y:player.y,
+vx:(Math.random()-.5)*4,
+vy:Math.random()*-4,
+life:30
 });
 }
+});
 
-/* MENÚ */
-function startGame(){
-menu.style.display="none";
-ambient.play();
-loop();
+/* HABILIDAD: pulso de luz */
+window.addEventListener("touchstart",e=>{
+if(e.touches.length===2 && player.pulse<=0){
+player.pulse=40;
+doors.forEach(d=>{
+if(Math.abs(player.x-d.x)<150)d.open=true;
+});
 }
-function loadGame(){
-const s=localStorage.getItem("luminaSave");
-if(s)Object.assign(player,JSON.parse(s));
-startGame();
-}
-function saveGame(){
-localStorage.setItem("luminaSave",JSON.stringify(player));
-}
-function endLevel(){
-pause.style.display="flex";
-pause.innerHTML="<h2>NIVEL COMPLETADO</h2><button onclick='saveGame()'>Guardar</button><button onclick='location.reload()'>Menú</button>";
-game=false;
-}
+});
 
 /* UPDATE */
 function update(){
+player.vy+=GRAVITY;
 player.x+=player.vx;
 player.y+=player.vy;
+
+player.onGround=false;
+if(player.y>=GROUND){
+player.y=GROUND;player.vy=0;
+player.onGround=true;player.jumping=false;
+}
+
+/* plataformas */
+platforms.forEach(p=>{
+if(player.x>p.x-20 && player.x<p.x+p.w &&
+player.y>=p.y && player.y<=p.y+20 && player.vy>=0){
+player.y=p.y;player.vy=0;player.onGround=true;
+}
+});
+
+/* puertas */
+doors.forEach(d=>{
+if(!d.open &&
+player.x>d.x-20 && player.x<d.x+d.w &&
+player.y>d.y && player.y<d.y+d.h){
+player.x-=player.vx;
+}
+});
+
+/* anim */
+if(Math.abs(player.vx)>0.1 && player.onGround)player.walk+=0.15;
+else player.walk=0;
+
+particles.forEach(p=>{
+p.x+=p.vx;p.y+=p.vy;p.life--;
+});
+for(let i=particles.length-1;i>=0;i--)
+if(particles[i].life<=0)particles.splice(i,1);
+
+if(player.pulse>0)player.pulse--;
+
 camX=player.x-c.width/2;
-
-flowers.forEach(f=>{
-if(!f.t&&Math.abs(player.x-f.x)<40&&Math.abs(player.y-f.y)<40)f.t=true;
-});
-if(flowers.filter(f=>f.t).length>=3)doors[0].open=true;
-
-player.light=1;
-darkZones.forEach(z=>{
-if(player.x>z.x&&player.x<z.x+z.w)player.light=.65;
-});
-
-if(player.x>levelEnd)endLevel();
 }
 
 /* DRAW */
@@ -114,76 +150,76 @@ function draw(){
 ctx.fillStyle="#0a1a12";
 ctx.fillRect(0,0,c.width,c.height);
 
-/* árboles fondo */
+/* árboles */
 trees.forEach(t=>{
 const x=t.x-camX;
 if(x<-100||x>c.width+100)return;
-ctx.fillStyle="#2c4b35";
-ctx.fillRect(x,c.height-t.h,22,t.h);
+ctx.fillStyle="#3b5";
 ctx.beginPath();
-ctx.fillStyle="#3f7a52";
-ctx.arc(x+11,c.height-t.h,36,0,6.28);
+ctx.arc(x,c.height-200,60,0,6.28);
 ctx.fill();
+ctx.fillStyle="#5a3";
+ctx.fillRect(x-12,c.height-200,24,100);
 });
 
-/* flores */
-flowers.forEach(f=>{
-if(!f.t){
-ctx.fillStyle="#6aff9c";
-ctx.beginPath();
-ctx.arc(f.x-camX,f.y,9,0,6.28);
-ctx.fill();
-}});
-
-/* zonas oscuras */
-darkZones.forEach(z=>{
-ctx.fillStyle="rgba(0,0,0,.35)";
-ctx.fillRect(z.x-camX,0,z.w,c.height);
+/* plataformas */
+ctx.fillStyle="#2d6";
+platforms.forEach(p=>{
+ctx.fillRect(p.x-camX,p.y,p.w,14);
 });
 
 /* puertas */
 doors.forEach(d=>{
-ctx.fillStyle=d.open?"#2aa":"#411";
-ctx.fillRect(d.x-camX,c.height-220,70,220);
+ctx.fillStyle=d.open?"#4c8":"#633";
+ctx.fillRect(d.x-camX,d.y,d.w,d.h);
 });
 
-/* luz */
-const g=ctx.createRadialGradient(
-player.x-camX,player.y,10,
-player.x-camX,player.y,player.r*player.light
-);
-g.addColorStop(0,"rgba(200,255,220,.85)");
-g.addColorStop(1,"rgba(0,0,0,0)");
-ctx.fillStyle=g;
+/* partículas */
+particles.forEach(p=>{
+ctx.fillStyle="rgba(200,255,220,"+(p.life/30)+")";
+ctx.fillRect(p.x-camX,p.y,4,4);
+});
+
+/* jugador */
+const px=player.x-camX;
+ctx.fillStyle="#eafff2";
 ctx.beginPath();
-ctx.arc(player.x-camX,player.y,player.r*player.light,0,6.28);
+ctx.arc(px,player.y-36,14,0,6.28);
 ctx.fill();
+
+/* piernas */
+ctx.strokeStyle="#bfe";
+ctx.lineWidth=4;
+const step=Math.sin(player.walk)*6;
+ctx.beginPath();
+if(player.jumping){
+ctx.moveTo(px-6,player.y);
+ctx.lineTo(px-6,player.y+16);
+ctx.moveTo(px+6,player.y);
+ctx.lineTo(px+6,player.y+16);
+}else{
+ctx.moveTo(px-6,player.y);
+ctx.lineTo(px-6+step,player.y+18);
+ctx.moveTo(px+6,player.y);
+ctx.lineTo(px+6-step,player.y+18);
+}
+ctx.stroke();
+
+/* pulso */
+if(player.pulse>0){
+ctx.fillStyle="rgba(200,255,220,.15)";
+ctx.beginPath();
+ctx.arc(px,player.y-36,120,0,6.28);
+ctx.fill();
+}
 }
 
 /* LOOP */
 function loop(){
-if(!game)return;
 update();draw();
 requestAnimationFrame(loop);
 }
-
-/* JOYSTICK OPTIMIZADO */
-let joy=false;
-joystick.addEventListener("pointerdown",()=>joy=true);
-window.addEventListener("pointerup",()=>{
-joy=false;player.vx=player.vy=0;
-stick.style.left="45px";stick.style.top="45px";
-});
-window.addEventListener("pointermove",e=>{
-if(!joy)return;
-const r=joystick.getBoundingClientRect();
-const dx=e.clientX-(r.left+65);
-const dy=e.clientY-(r.top+65);
-player.vx=Math.sign(dx)*SPEED*(Math.abs(dx)/60);
-player.vy=Math.sign(dy)*SPEED*(Math.abs(dy)/60);
-stick.style.left=45+dx*.35+"px";
-stick.style.top=45+dy*.35+"px";
-});
+loop();
 </script>
 </body>
 </html>
