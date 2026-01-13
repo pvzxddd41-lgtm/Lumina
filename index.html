@@ -9,24 +9,24 @@ html,body{margin:0;padding:0;overflow:hidden;background:#000;font-family:sans-se
 canvas{display:block}
 #menu,#pause{
 position:absolute;top:0;left:0;width:100%;height:100%;
-background:rgba(0,0,0,.85);color:#fff;
+background:rgba(0,0,0,.9);color:#fff;
 display:flex;flex-direction:column;
 align-items:center;justify-content:center;z-index:10
 }
 button{
-padding:12px 20px;margin:8px;
-background:#2a8;color:#fff;
-border:none;border-radius:8px;font-size:16px
+padding:14px 24px;margin:8px;
+background:#3aa;color:#fff;
+border:none;border-radius:10px;font-size:16px
 }
 #joystick{
-position:absolute;bottom:40px;left:40px;
-width:120px;height:120px;border-radius:50%;
-background:rgba(255,255,255,.1)
+position:absolute;bottom:30px;left:30px;
+width:130px;height:130px;border-radius:50%;
+background:rgba(255,255,255,.12)
 }
 #stick{
-position:absolute;left:40px;top:40px;
+position:absolute;left:45px;top:45px;
 width:40px;height:40px;border-radius:50%;
-background:rgba(255,255,255,.4)
+background:rgba(255,255,255,.5)
 }
 </style>
 </head>
@@ -34,18 +34,13 @@ background:rgba(255,255,255,.4)
 
 <div id="menu">
 <h1>LUMINA</h1>
-<button onclick="newGame()">Nuevo juego</button>
-<button onclick="loadGame()">Cargar partida</button>
+<button onclick="startGame()">Jugar</button>
+<button onclick="loadGame()">Cargar</button>
 </div>
 
-<div id="pause" style="display:none">
-<button onclick="saveGame()">Guardar</button>
-<button onclick="resume()">Continuar</button>
-<button onclick="exitMenu()">Salir al menú</button>
-</div>
+<div id="pause" style="display:none"></div>
 
 <canvas id="c"></canvas>
-
 <div id="joystick"><div id="stick"></div></div>
 
 <audio id="ambient" loop>
@@ -53,118 +48,141 @@ background:rgba(255,255,255,.4)
 </audio>
 
 <script>
-const canvas=c.getContext?document.getElementById("c"):null;
-const ctx=c.getContext("2d");
+const c=document.getElementById("c");
+const ctx=c.getContext("2d",{alpha:false});
 c.width=innerWidth;c.height=innerHeight;
 
-let gameRunning=false;
-let camX=0;
-let levelEnd=4800;
+let camX=0,game=true;
+const SPEED=3;
 
-const player={x:200,y:300,r:45,light:1,vx:0,vy:0};
-const flowers=[],darkZones=[],doors=[{x:2400,open:false}];
+const player={x:200,y:c.height/2,r:36,light:1,vx:0,vy:0};
 
-for(let i=700;i<3000;i+=600)flowers.push({x:i,y:300,t:false});
-darkZones.push({x:1500,w:400},{x:3500,w:500});
+const flowers=[],trees=[],darkZones=[{x:1400,w:400},{x:3400,w:500}];
+const doors=[{x:2600,open:false}];
+const levelEnd=4800;
 
-function newGame(){
-document.getElementById("menu").style.display="none";
-gameRunning=true;loop();
-ambient.play();
+/* GENERAR MAPA */
+for(let i=600;i<3000;i+=500)flowers.push({x:i,y:320,t:false});
+for(let i=0;i<5200;i+=180){
+trees.push({
+x:i,
+h:120+Math.random()*80
+});
 }
 
+/* MENÚ */
+function startGame(){
+menu.style.display="none";
+ambient.play();
+loop();
+}
+function loadGame(){
+const s=localStorage.getItem("luminaSave");
+if(s)Object.assign(player,JSON.parse(s));
+startGame();
+}
 function saveGame(){
 localStorage.setItem("luminaSave",JSON.stringify(player));
 }
-
-function loadGame(){
-const s=localStorage.getItem("luminaSave");
-if(s){Object.assign(player,JSON.parse(s));}
-newGame();
+function endLevel(){
+pause.style.display="flex";
+pause.innerHTML="<h2>NIVEL COMPLETADO</h2><button onclick='saveGame()'>Guardar</button><button onclick='location.reload()'>Menú</button>";
+game=false;
 }
 
-function resume(){pause.style.display="none";gameRunning=true;loop()}
-function exitMenu(){location.reload()}
-
+/* UPDATE */
 function update(){
-camX=player.x-c.width/2;
 player.x+=player.vx;
 player.y+=player.vy;
+camX=player.x-c.width/2;
 
 flowers.forEach(f=>{
-if(!f.t&&Math.hypot(player.x-f.x,player.y-f.y)<50)f.t=true;
+if(!f.t&&Math.abs(player.x-f.x)<40&&Math.abs(player.y-f.y)<40)f.t=true;
 });
 if(flowers.filter(f=>f.t).length>=3)doors[0].open=true;
 
 player.light=1;
 darkZones.forEach(z=>{
-if(player.x>z.x&&player.x<z.x+z.w)player.light=.6;
+if(player.x>z.x&&player.x<z.x+z.w)player.light=.65;
 });
 
-if(player.x>levelEnd){
-pause.style.display="flex";
-pause.innerHTML="<h2>NIVEL COMPLETADO</h2><button onclick='exitMenu()'>Menú</button>";
-gameRunning=false;
-}
+if(player.x>levelEnd)endLevel();
 }
 
+/* DRAW */
 function draw(){
-ctx.fillStyle="#0b1d12";
+ctx.fillStyle="#0a1a12";
 ctx.fillRect(0,0,c.width,c.height);
 
-ctx.fillStyle="#173d2b";
-for(let i=-camX%200;i<c.width;i+=200){
-ctx.fillRect(i,c.height-150,40,150);
-}
+/* árboles fondo */
+trees.forEach(t=>{
+const x=t.x-camX;
+if(x<-100||x>c.width+100)return;
+ctx.fillStyle="#2c4b35";
+ctx.fillRect(x,c.height-t.h,22,t.h);
+ctx.beginPath();
+ctx.fillStyle="#3f7a52";
+ctx.arc(x+11,c.height-t.h,36,0,6.28);
+ctx.fill();
+});
 
+/* flores */
 flowers.forEach(f=>{
 if(!f.t){
 ctx.fillStyle="#6aff9c";
 ctx.beginPath();
-ctx.arc(f.x-camX,f.y,10,0,Math.PI*2);ctx.fill();
+ctx.arc(f.x-camX,f.y,9,0,6.28);
+ctx.fill();
 }});
 
+/* zonas oscuras */
 darkZones.forEach(z=>{
-ctx.fillStyle="rgba(0,0,0,.4)";
+ctx.fillStyle="rgba(0,0,0,.35)";
 ctx.fillRect(z.x-camX,0,z.w,c.height);
 });
 
+/* puertas */
 doors.forEach(d=>{
-ctx.fillStyle=d.open?"#2a8":"#422";
-ctx.fillRect(d.x-camX,c.height-200,60,200);
+ctx.fillStyle=d.open?"#2aa":"#411";
+ctx.fillRect(d.x-camX,c.height-220,70,220);
 });
 
+/* luz */
 const g=ctx.createRadialGradient(
 player.x-camX,player.y,10,
 player.x-camX,player.y,player.r*player.light
 );
-g.addColorStop(0,"rgba(200,255,220,.9)");
+g.addColorStop(0,"rgba(200,255,220,.85)");
 g.addColorStop(1,"rgba(0,0,0,0)");
 ctx.fillStyle=g;
 ctx.beginPath();
-ctx.arc(player.x-camX,player.y,player.r*player.light,0,Math.PI*2);
+ctx.arc(player.x-camX,player.y,player.r*player.light,0,6.28);
 ctx.fill();
 }
 
+/* LOOP */
 function loop(){
-if(!gameRunning)return;
+if(!game)return;
 update();draw();
 requestAnimationFrame(loop);
 }
 
-/* JOYSTICK */
+/* JOYSTICK OPTIMIZADO */
 let joy=false;
-joystick.addEventListener("pointerdown",e=>joy=true);
-window.addEventListener("pointerup",()=>{joy=false;player.vx=player.vy=0});
+joystick.addEventListener("pointerdown",()=>joy=true);
+window.addEventListener("pointerup",()=>{
+joy=false;player.vx=player.vy=0;
+stick.style.left="45px";stick.style.top="45px";
+});
 window.addEventListener("pointermove",e=>{
 if(!joy)return;
 const r=joystick.getBoundingClientRect();
-const dx=e.clientX-(r.left+60);
-const dy=e.clientY-(r.top+60);
-player.vx=dx*.05;
-player.vy=dy*.05;
-stick.style.left=40+dx*.3+"px";
-stick.style.top=40+dy*.3+"px";
+const dx=e.clientX-(r.left+65);
+const dy=e.clientY-(r.top+65);
+player.vx=Math.sign(dx)*SPEED*(Math.abs(dx)/60);
+player.vy=Math.sign(dy)*SPEED*(Math.abs(dy)/60);
+stick.style.left=45+dx*.35+"px";
+stick.style.top=45+dy*.35+"px";
 });
 </script>
 </body>
